@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: write
 
 jobs:
   update_draft_and_rc:
@@ -31,6 +32,43 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # --- Docker Build Steps ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata for RC
+        id: meta_rc
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.release_drafter.outputs.tag_name }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.event.pull_request.head.sha }}
+
+      - name: Build and push RC Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_rc.outputs.tags }}
+          labels: ${{ steps.meta_rc.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Go Build Steps---
       - name: Build Go Binaries for RC
         id: build
         uses: ./.github/actions/go-builder
