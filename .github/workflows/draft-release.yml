@@ -36,7 +36,7 @@ jobs:
         uses: ./.github/actions/go-builder
         with:
           platforms: linux/amd64,linux/386,linux/arm64,windows/amd64,windows/386,darwin/amd64,darwin/arm64
-          package-dir: .
+          package-dir: ./cmd/certbot-manager
           version: ${{ steps.release_drafter.outputs.tag_name }}
           app-name: certbot-manager
           output-dir: build

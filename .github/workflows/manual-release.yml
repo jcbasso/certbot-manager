@@ -49,7 +49,7 @@ jobs:
         run: |
           TAG="${{ github.event.inputs.tag_name }}"
           git tag "$TAG"
-          git push https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git "$TAG"
+          git push origin "$TAG"
           echo "::notice ::Tag $TAG created and pushed."
 
       - name: Create GitHub Release
