@@ -1,0 +1,87 @@
+# Template for the release name (e.g., "v1.2.3")
+name-template: 'v$RESOLVED_VERSION'
+# Template for the tag name (e.g., "v1.2.3")
+tag-template: 'v$RESOLVED_VERSION'
+
+# Define categories for organizing changes in the release notes
+categories:
+  - title: 'Breaking Changes'
+    label: 'breaking'
+  - title: 'New'
+    label: 'feature'
+  - title: 'Bug Fixes'
+    label: 'fix'
+  - title: 'Maintenance'
+    labels:
+      - 'maintenance'
+      - 'chore'
+  - title: 'Documentation'
+    label: 'docs'
+  - title: 'Dependency Updates'
+    label: 'dependencies'
+    collapse-after: 5 # Collapse this section if there are more than 5 dependency updates
+
+# Template for individual change lines in the release notes
+# $TITLE: PR Title
+# $NUMBER: PR Number
+# $AUTHOR: PR Author username
+change-template: '- $TITLE @$AUTHOR (#$NUMBER)'
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+# Configure how the next version is calculated
+version-resolver:
+  major:
+    labels:
+      # PRs with these labels trigger a major bump (e.g., 1.x.x -> 2.0.0)
+      - 'breaking'
+      - 'major'
+  minor:
+    labels:
+      # PRs with these labels trigger a minor bump (e.g., 1.1.x -> 1.2.0)
+      - 'feature'
+      - 'minor'
+  patch:
+    labels:
+      # PRs with these labels trigger a patch bump (e.g., 1.1.1 -> 1.1.2)
+      - 'fix'
+      - 'bug'
+      - 'maintenance'
+      - 'chore'
+      - 'docs'
+      - 'dependencies'
+      - 'security'
+      - 'refactor'
+      - 'perf'
+      - 'test'
+  default: patch
+
+# Automatically add labels to PRs based on branch names or files modified
+autolabeler:
+  - label: 'fix'
+    branch:
+      - '/^(fix|bugfix|hotfix)\/.+/'
+  - label: 'feature'
+    branch:
+      - '/^feature\/.+/'
+  - label: 'docs'
+    branch:
+      - '/^docs?\/.+/'
+  - label: 'breaking'
+    branch:
+      - '/^release?\/.+/'
+  - label: 'chore'
+    branch:
+      - '/^chore\/.+/'
+  - label: 'dependencies'
+    files:
+      - 'go.mod'
+      - 'go.sum'
+
+# Labels that exclude a PR from the release notes
+exclude-labels:
+  - 'skip-changelog'

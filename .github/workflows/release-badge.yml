@@ -1,0 +1,40 @@
+name: Release Badge
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Get Tag and Commit SHA
+        id: tag-info
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          COMMIT_SHA=$(git rev-parse $TAG)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Tag: $TAG"
+          echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+          echo "Commit SHA: $COMMIT_SHA"
+
+      - name: Find Branch for Commit
+        id: find_branch_action
+        uses: ./.github/actions/find-branch
+        with:
+          commit-sha: ${{ steps.tag-info.outputs.commit_sha }}
+
+      - name: Update Release Badge
+        uses: ./.github/actions/update-badge
+        with:
+          template-path: docs/assets/badge/release-badge-template.svg
+          output-path: docs/assets/badge/release-badge.svg
+          placeholder: RELEASE_VERSION
+          value: ${{ steps.tag-info.outputs.tag }}
+          commit-message: "Bot: Update release badge to ${{ steps.tag-info.outputs.tag }}"
+          commit-branch: ${{ steps.find_branch_action.outputs.branch }}

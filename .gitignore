@@ -1,0 +1,13 @@
+# IDE & OS
+.idea
+.DS_Store
+
+# Environment Variables
+.env
+docker-compose.yml
+config.toml
+
+# AI files to give context
+ai/
+ai_script.sh
+code.txt

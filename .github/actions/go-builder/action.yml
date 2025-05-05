@@ -1,0 +1,135 @@
+name: 'Go Cross Build'
+description: 'Builds Go binaries for multiple platforms, compresses them, and injects version info.'
+
+inputs:
+  platforms:
+    description: 'Comma-separated list of platforms (GOOS/GOARCH pairs, e.g., "linux/amd64,windows/amd64").'
+    required: true
+  package-dir:
+    description: 'Path to the directory containing the main Go package to build.'
+    required: false
+    default: '.'
+  version:
+    description: 'The version string to use for naming artifacts and injecting via ldflags.'
+    required: true
+  app-name:
+    description: 'The base name for the executable file.'
+    required: true
+  output-dir:
+    description: 'The directory where the final compressed artifacts will be placed.'
+    required: false
+    default: 'release-builds'
+  compress:
+    description: 'Whether to compress the output binaries.'
+    required: false
+    default: 'false'
+  ldflags-template:
+    description: 'Template for ldflags. Use {{VERSION}} as placeholder for the version input.'
+    required: false
+    default: '-s -w -X main.version={{VERSION}}'
+
+outputs:
+  artifact-path:
+    description: 'The path to the directory containing the built artifacts.'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Build Go Binaries
+      shell: bash
+      run: |
+        set -e # Exit on error
+        
+        # --- Input Validation and Setup ---
+        APP_NAME="${{ inputs.app-name }}"
+        VERSION="${{ inputs.version }}"
+        PACKAGE_DIR="${{ inputs.package-dir }}"
+        BUILD_DIR="${{ inputs.output-dir }}"
+        COMPRESS_OUTPUT="${{ inputs.compress }}"
+        LDFLAGS_TEMPLATE="${{ inputs.ldflags-template }}"
+
+        if [[ -z "$APP_NAME" || -z "$VERSION" || -z "$PACKAGE_DIR" ]]; then
+          echo "APP_NAME: $APP_NAME"
+          echo "VERSION: $VERSION"
+          echo "PACKAGE_DIR: $PACKAGE_DIR"
+          echo "::error::Inputs 'app-name', 'version', and 'package-dir' are required."
+          exit 1
+        fi
+
+        # Inject version into ldflags template
+        LDFLAGS=$(echo "$LDFLAGS_TEMPLATE" | sed "s/{{VERSION}}/$VERSION/g")
+
+        echo "::notice::Starting Go build process..."
+
+        # Create output directory
+        mkdir -p "$BUILD_DIR"
+
+        # Convert comma-separated platforms string to array
+        IFS=',' read -ra PLATFORM_ARRAY <<< "${{ inputs.platforms }}"
+        echo "  Target Platforms: ${PLATFORM_ARRAY[@]}"
+
+        if [ ${#PLATFORM_ARRAY[@]} -eq 0 ]; then
+            echo "::error::No platforms specified in the 'platforms' input."
+            exit 1
+        fi
+
+        # --- Build Loop ---
+        for platform in "${PLATFORM_ARRAY[@]}"; do
+          # Trim whitespace from platform string
+          platform=$(echo "$platform" | xargs)
+          if [[ -z "$platform" || "$platform" != *"/"* ]]; then
+             echo "::warning::Skipping invalid platform format: '$platform'"
+             continue
+          fi
+
+          GOOS=${platform%/*}
+          GOARCH=${platform#*/}
+          OUTPUT_NAME="$APP_NAME"
+          if [[ "$COMPRESS_OUTPUT" != "true" ]]; then
+            OUTPUT_NAME+="-${GOOS}-${GOARCH}"
+          fi
+          if [ "$GOOS" = "windows" ]; then
+            OUTPUT_NAME+=".exe"
+          fi
+          OUTPUT_PATH="$BUILD_DIR/$OUTPUT_NAME"
+
+          echo "::group::Building for $GOOS/$GOARCH"
+          echo "  Output path: $OUTPUT_PATH"
+
+          # Build the specific package directory provided
+          env GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags="$LDFLAGS" -o "$OUTPUT_PATH" "$PACKAGE_DIR"
+          if [ $? -ne 0 ]; then
+              echo "::error::Build failed for $GOOS/$GOARCH"
+              exit 1 # Exit the whole action on build failure
+          fi
+          echo "  Build successful."
+
+          # --- Compression ---
+          if [[ "$COMPRESS_OUTPUT" == "true" ]]; then
+            echo "  Compressing $OUTPUT_NAME..."
+            # Use a subshell to change directory temporarily
+            (
+              cd "$BUILD_DIR"
+              ARCHIVE_NAME="$APP_NAME-${GOOS}-${GOARCH}"
+              if [ "$GOOS" = "windows" ]; then
+                ARCHIVE_NAME+=".zip"
+                zip "$ARCHIVE_NAME" "$OUTPUT_NAME"
+              else
+                ARCHIVE_NAME+=".tar.gz"
+                tar -czvf "$ARCHIVE_NAME" "$OUTPUT_NAME"
+              fi
+              # Remove the raw binary after archiving
+              rm "$OUTPUT_NAME"
+              echo "  Archive created: $BUILD_DIR/$ARCHIVE_NAME"
+            )
+            if [ $? -ne 0 ]; then
+                echo "::error::Compression failed for $OUTPUT_NAME"
+                exit 1
+            fi
+          fi
+          echo "::endgroup::" # End platform build group
+        done
+
+        echo "::notice::All builds completed."
+
+        echo "artifact-path=$BUILD_DIR" >> $GITHUB_OUTPUT

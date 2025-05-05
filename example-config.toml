@@ -1,0 +1,18 @@
+# =========================================
+# Globals
+# =========================================
+[globals]
+    email = "admin@example.com"
+    webroot_path = "/var/www/acme-challenge"
+    staging = true
+    no_eff_email = true
+    key_type = "ecdsa"
+    initial_force_renewal = false
+    renewal_cron = "0 0 0,12 * * *"
+
+# =========================================
+# Certificates
+# =========================================
+[[certificate]]
+    domains = ["my-domain.duckdns.org"]
+    authenticator = "dns-duckdns"

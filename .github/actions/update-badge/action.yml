@@ -1,0 +1,60 @@
+name: 'Update Badge'
+description: 'Updates a badge SVG file based on a template and a value.'
+inputs:
+  template-path:
+    description: 'Path to the SVG template file.'
+    required: true
+  output-path:
+    description: 'Path to the output SVG file.'
+    required: true
+  placeholder:
+    description: 'Placeholder string in the template to replace.'
+    required: true
+  value:
+    description: 'Value to replace the placeholder with.'
+    required: true
+  commit-message:
+    description: 'Commit message for the badge update.'
+    required: true
+  commit-branch:
+    description: 'Branch to commit to.'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Create Badge
+      shell: bash
+      run: |
+        TEMPLATE=$(cat ${{ inputs.template-path }})
+        SVG=$(echo "$TEMPLATE" | sed "s/{{${{ inputs.placeholder }}}}/${{ inputs.value }}/g")
+        echo "$SVG" > ${{ inputs.output-path }}
+
+    - name: Check for Badge Changes
+      id: check-changes
+      shell: bash
+      run: |
+        FILE="${{ inputs.output-path }}"
+
+          if git ls-files --error-unmatch "$FILE" > /dev/null 2>&1; then
+            if git diff --exit-code --quiet -- "$FILE"; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            if git diff --exit-code --quiet /dev/null "$FILE"; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo "check-changes output: ${{ steps.check-changes.outputs.changed }}"
+
+    - name: Commit Badge
+      if: steps.check-changes.outputs.changed == 'true'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: ${{ inputs.commit-message }}
+        file_pattern: ${{ inputs.output-path }}
+        branch: ${{ inputs.commit-branch }}

@@ -1,0 +1,64 @@
+name: Manual Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to release (e.g., v1.2.3)'
+        required: true
+        type: string
+      target_commit:
+        description: 'Target commit SHA (leave blank for latest on branch)'
+        required: false
+        type: string
+      release_type:
+        description: 'Release type'
+        required: true
+        type: choice
+        options:
+          - Release
+          - Pre-release
+        default: Release
+      create_draft:
+        description: 'Create a draft release?'
+        required: true
+        type: boolean
+        default: false
+      latest:
+        description: 'Set as "Latest"?'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Checkout Specific Commit
+        if: ${{ github.event.inputs.target_commit != '' }}
+        run: |
+          git checkout ${{ github.event.inputs.target_commit }}
+
+      - name: Create and Push Tag
+        id: create-tag
+        run: |
+          TAG="${{ github.event.inputs.tag_name }}"
+          git tag "$TAG"
+          git push https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git "$TAG"
+          echo "::notice ::Tag $TAG created and pushed."
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          target_commitish: ${{ github.event.inputs.target_commit != '' && github.event.inputs.target_commit || github.ref }}
+          draft: ${{ github.event.inputs.create_draft }}
+          prerelease: ${{ (github.event.inputs.release_type == 'Pre-release') && 'true' || 'false' }}
+          make_latest: ${{ github.event.inputs.latest }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

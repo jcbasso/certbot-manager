@@ -1,0 +1,33 @@
+name: Go Version Badge
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'go.mod'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Get Go Version from go.mod
+        id: go-version
+        run: |
+          if [ -f "go.mod" ]; then
+            echo "version=$(grep '^go ' go.mod | cut -d ' ' -f 2 | sed 's/^v//')" >> $GITHUB_OUTPUT
+          else:
+            echo "version=unknown" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update Go Version Badge
+        uses: ./.github/actions/update-badge
+        with:
+          template-path: docs/assets/badge/go-version-badge-template.svg
+          output-path: docs/assets/badge/go-version-badge.svg
+          placeholder: GO_VERSION
+          value: ${{ steps.go-version.outputs.version }}
+          commit-message: "Bot: Updating Go version badge to v${{ steps.go-version.outputs.version }}"
+          commit-branch: ${{ github.ref_name }}

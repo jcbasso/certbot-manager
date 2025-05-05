@@ -1,0 +1,80 @@
+name: 'Find Branch Containing Commit'
+description: 'Finds the highest priority branch containing a specific commit SHA, falling back to the first found branch.'
+inputs:
+  commit-sha:
+    description: 'The commit SHA to search for.'
+    required: true
+  default-branch:
+    description: 'The ultimate default branch if NO branches contain the commit.'
+    required: false
+    default: 'main'
+outputs:
+  branch:
+    description: 'The determined branch name containing the commit.'
+    value: ${{ steps.find_branch_step.outputs.branch }}
+runs:
+  using: "composite"
+  steps:
+    - name: Find Branch Logic
+      id: find_branch_step
+      shell: bash
+      run: |
+        COMMIT_SHA="${{ inputs.commit-sha }}"
+        ULTIMATE_DEFAULT_BRANCH="${{ inputs.default-branch }}" # Default if absolutely nothing found
+        TARGET_BRANCH="$ULTIMATE_DEFAULT_BRANCH" # Start with the ultimate default
+
+        echo "::notice::Searching for branches containing commit: $COMMIT_SHA"
+        echo "::notice::Ultimate default branch: $ULTIMATE_DEFAULT_BRANCH"
+
+        # Fetch latest branches
+        if ! git fetch --all --quiet; then
+           echo "::error::Failed to fetch branches from remote."
+           exit 1
+        fi
+
+        # Filter remote branches containing the commit
+        BRANCH_LIST=$(git branch -r --contains "$COMMIT_SHA" | sed 's|.*origin/||' | grep -v 'HEAD')
+
+        if [[ -z "$BRANCH_LIST" ]]; then
+           echo "::warning::No remote branches found containing commit $COMMIT_SHA. Committing badge to default branch '$TARGET_BRANCH'."
+           echo "branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+           exit 0 # Exit successfully, using the ultimate default
+        fi
+        echo "Found branches containing commit: $BRANCH_LIST"
+
+        # --- Priority Check ---
+        PRIORITY_LIST="main master bug/ hotfix/ fix/ release/ feature/ feat/"
+        FOUND_PRIORITY_BRANCH=""
+
+        for priority in $PRIORITY_LIST; do
+          if [[ "$priority" == */ ]]; then
+            MATCH=$(echo "$BRANCH_LIST" | { grep "^${priority}" || true; } | head -n 1)
+            if [[ -n "$MATCH" ]]; then
+              FOUND_PRIORITY_BRANCH="$MATCH"
+              break
+            fi
+          else
+            # Check for exact match
+            if echo "$BRANCH_LIST" | grep -q -w "^${priority}$"; then
+              FOUND_PRIORITY_BRANCH="$priority"
+              break
+            fi
+          fi
+        done
+
+        if [[ -n "$FOUND_PRIORITY_BRANCH" ]]; then
+          TARGET_BRANCH="$FOUND_PRIORITY_BRANCH"
+          echo "::notice::Commit found on priority branch '$TARGET_BRANCH'. Setting as target."
+        else
+          FIRST_BRANCH=$(echo "$BRANCH_LIST" | head -n 1)
+          if [[ -n "$FIRST_BRANCH" ]]; then
+              TARGET_BRANCH="$FIRST_BRANCH"
+              echo "::warning::Commit $COMMIT_SHA not found on any priority branch. Falling back to first found branch: '$TARGET_BRANCH'."
+          else
+              # This case should be rare if BRANCH_LIST wasn't empty initially, but keep default as final safety net
+              echo "::warning::Commit $COMMIT_SHA not found on any priority branch and could not determine fallback. Using ultimate default: '$TARGET_BRANCH'."
+          fi
+        fi
+
+        echo "Determined target branch: $TARGET_BRANCH"
+        echo "branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT

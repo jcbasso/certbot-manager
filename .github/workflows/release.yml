@@ -1,0 +1,116 @@
+name: Finalize Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  publish_release:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Get Final Release Info
+        id: release_drafter_final
+        uses: jcbasso/release-drafter@nightly
+        with:
+          publish: false
+          commitish: ${{ github.sha }}
+          not-create: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and Push Final Tag
+        id: final_tag
+        shell: bash
+        run: |
+          FINAL_TAG="v${{ steps.release_drafter_final.outputs.resolved_version }}"
+          if [[ -z "$FINAL_TAG" ]]; then
+            echo "::error::Release Drafter did not determine a final tag name. Cannot proceed."
+            exit 1
+          fi
+
+          echo "Final tag determined: $FINAL_TAG"
+
+          # Check if tag already exists
+          if git rev-parse -q --verify "refs/tags/$FINAL_TAG" >/dev/null; then
+             echo "::warning::Final tag $FINAL_TAG already exists. Skipping creation."
+             echo "tag_exists=true" >> $GITHUB_OUTPUT
+             echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT # Still output tag name
+             exit 0
+          fi
+
+          echo "Creating tag $FINAL_TAG pointing to ${{ github.sha }}"
+          git tag "$FINAL_TAG" "${{ github.sha }}"
+
+          echo "Pushing tag $FINAL_TAG"
+          git push https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git "$FINAL_TAG"
+
+          echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
+          echo "tag_exists=false" >> $GITHUB_OUTPUT
+
+      - name: Publish Release
+        # Only publish if the tag didn't already exist
+        if: steps.final_tag.outputs.tag_exists == 'false'
+        shell: bash
+        run: |
+          FINAL_TAG="${{ steps.final_tag.outputs.final_tag }}"
+          echo "Publishing release for tag $FINAL_TAG"
+
+          # Use gh cli to find the DRAFT release by tag name and update it
+          RELEASE_TAG=$(gh release list --limit 100 --json name,tagName --jq ".[] | select(.tagName | startswith(\"$FINAL_TAG\")) | .name" 2>/dev/null | head -n 1 || echo "")
+
+          if [[ -z "$RELEASE_TAG" ]]; then
+              echo "::warning::Could not find existing draft release for tag $FINAL_TAG. Creating a new one."
+              # Create a new release if draft wasn't found (fallback)
+              gh release create "$FINAL_TAG" \
+                 --tag "$FINAL_TAG" \
+                 --title "v${{ steps.release_drafter_final.outputs.resolved_version }}" \
+                 --notes "${{ steps.release_drafter_final.outputs.body }}" \
+                 --target "${{ github.sha }}" \
+                 --draft=false \
+                 --prerelease=false \
+                 --latest=true
+          else
+              echo "Found draft release ID: $RELEASE_TAG. Updating to published."
+              # Edit the existing draft release
+              gh release edit "$RELEASE_TAG" \
+                 --tag "$FINAL_TAG" \
+                 --title "v${{ steps.release_drafter_final.outputs.resolved_version }}" \
+                 --notes "${{ steps.release_drafter_final.outputs.body }}" \
+                 --target "${{ github.sha }}" \
+                 --draft=false \
+                 --prerelease=false \
+                 --latest=true
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cleanup RC Tags
+        # Only run if a new tag was created
+        if: steps.final_tag.outputs.tag_exists == 'false'
+        shell: bash
+        run: |
+          FINAL_TAG="${{ steps.final_tag.outputs.final_tag }}"
+          echo "Cleaning up RC tags for $FINAL_TAG..."
+          git fetch --tags --quiet
+          RC_TAGS=$(git tag --list "${FINAL_TAG}-rc*")
+          git config --local user.name github-actions
+          git config --local user.email github-actions@github.com
+          if [[ -n "$RC_TAGS" ]]; then
+            for rc_tag in $RC_TAGS; do
+              echo "Deleting remote tag $rc_tag"
+              git push --delete https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/${{ github.repository }}.git "$rc_tag" \
+                || echo "::warning::Failed to delete tag $rc_tag. It might have already been deleted."
+            done
+          else
+            echo "No RC tags found to delete."
+          fi

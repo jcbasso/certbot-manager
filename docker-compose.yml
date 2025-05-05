@@ -1,0 +1,17 @@
+services:
+  certbot-manager:
+    build: .
+    container_name: certbot-manager
+    env_file:
+      - .env
+    environment:
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN}
+    volumes:
+      - ./config.toml:/app/certbot.toml:ro
+      - letsencrypt_data:/etc/letsencrypt                 # Cert storage (read/write)
+      - acme_challenge_webroot:/var/www/acme-challenge    # Webroot (read/write)
+    command: ["--config", "./certbot.toml"]
+
+volumes:
+  letsencrypt_data:
+  acme_challenge_webroot:

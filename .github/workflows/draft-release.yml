@@ -1,0 +1,84 @@
+name: Draft Release
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update_draft_and_rc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Draft Release Notes
+        id: release_drafter
+        uses: jcbasso/release-drafter@nightly
+        with:
+          publish: true
+          prerelease: true
+          prerelease-identifier: 'rc'
+          commitish: ${{ github.event.pull_request.head.sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Go Binaries for RC
+        id: build
+        uses: ./.github/actions/go-builder
+        with:
+          platforms: linux/amd64,linux/386,linux/arm64,windows/amd64,windows/386,darwin/amd64,darwin/arm64
+          package-dir: .
+          version: ${{ steps.release_drafter.outputs.tag_name }}
+          app-name: certbot-manager
+          output-dir: build
+          compress: true
+
+      - name: Delete Previous RC Assets from Draft
+        if: steps.release_drafter.outputs.id != ''
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.release_drafter.outputs.tag_name }}
+        run: |
+          echo "Listing assets for Release ID: $RELEASE_TAG"
+          # Use jq to extract asset names
+          ASSET_NAMES=$(gh release view --json assets --jq '.assets[].name' "$RELEASE_TAG" 2>/dev/null || echo "")
+
+          if [[ -z "$ASSET_NAMES" ]]; then
+            echo "No existing assets found to delete."
+            exit 0
+          fi
+
+          echo "::group::Found assets to delete"
+          echo "$ASSET_NAMES"
+          echo "::endgroup::"
+
+          # Loop through asset names and delete them
+          echo "::group::Deleting assets"
+          while IFS= read -r asset_name; do
+            echo "$asset_name"
+            # Use gh release delete-asset. The 'yes' flag skips confirmation.
+            gh release delete-asset "$RELEASE_TAG" "$asset_name" --yes
+            if [ $? -ne 0 ]; then
+              echo "::warning::Failed to delete asset '$asset_name'. It might have already been deleted or there was an issue."
+            fi
+          done <<< "$ASSET_NAMES" # Use Here String for safer looping
+          echo "::endgroup::"
+
+          echo "Finished deleting previous assets." 
+
+      - name: Upload RC Assets to Draft
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          files: './build/*'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-id: ${{ steps.release_drafter.outputs.id }}
