@@ -16,3 +16,4 @@
 [[certificate]]
     domains = ["my-domain.duckdns.org"]
     authenticator = "dns-duckdns"
+    args = "--vvv --nginx"
