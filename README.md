@@ -33,7 +33,7 @@ TOML file. Designed to run alongside a reverse proxy like Nginx.
 
 > [!IMPORTANT]
 > Since `certbot-manager` leverages Certbot, you must first install Certbot separately on your system if running
-standalone.
+> standalone.
 > See [Certbot Installation](https://certbot.eff.org/instructions) for instructions.
 
 1. Download the latest binary from the [Releases](https://github.com/YOUR_USERNAME/YOUR_REPO/releases) page.
@@ -56,20 +56,15 @@ server/proxy container. The Certbot dependency is included in the Docker image.
 ```yaml
 services:
   certbot-manager:
-    image: your-dockerhub-username/certbot-manager:latest
+    image: ghcr.io/jcbasso/certbot-manager:latest
     container_name: certbot-manager
-    # env_file:
-    #   - .env
-    environment:
-    # CERTBOT_MANAGER_LOGLEVEL: "debug"
-    # CERTBOT_MANAGER_GLOBALS_EMAIL: "prod-admin@example.com"
-    # DUCKDNS_TOKEN: ${DUCKDNS_TOKEN} # Reads from .env file
+    env_file:
+      - .env
     volumes:
       - ./config.toml:/app/config.toml:ro
       - letsencrypt_data:/etc/letsencrypt
       - acme_challenge_webroot:/var/www/acme-challenge
     restart: unless-stopped
-    # command: ["--config", "/etc/custom/my-config.toml", "--log-level", "debug"]
 
 volumes:
   letsencrypt_data:
@@ -109,7 +104,7 @@ point in Docker).
 | `webroot_path`          | No       | Default path for `webroot` authenticator's ACME challenges.                   | `"/var/www/acme-challenge"`  |
 | `staging`               | No       | Use Let's Encrypt staging server (default: `false`). Recommended for testing. | `true`                       |
 | `key_type`              | No       | Preferred key type (`ecdsa` or `rsa`, default: `""` -> certbot default).      | `"ecdsa"`                    |
-| `renewal_cron`          | No       | Cron expression for periodic renewal checks.                                  | `"0 0 3 * * *"` (3 AM daily)|
+| `renewal_cron`          | No       | Cron expression for periodic renewal checks.                                  | `"0 0 3 * * *"` (3 AM daily) |
 | `initial_force_renewal` | No       | Use `--force-renewal` on first run (default: `false`).                        | `true`                       |
 | `no_eff_email`          | No       | Disable EFF mailing list signup (default: `true`).                            | `true`                       |
 
@@ -139,12 +134,12 @@ Arguments passed via the command line override environment variables and the con
 ./certbot-manager --help
 ```
 
-| Flag             | Shorthand | Description                                             | Default                  |
-|------------------|-----------|---------------------------------------------------------|--------------------------|
+| Flag             | Shorthand | Description                                             | Default                                                               |
+|------------------|-----------|---------------------------------------------------------|-----------------------------------------------------------------------|
 | `--config`       | `-c`      | Path to the TOML configuration file.                    | `/app/config.toml` (in Docker) / `./config.toml` (standalone default) |
-| `--certbot-path` |           | Path to the `certbot` executable.                       | `certbot` (uses PATH)    |
-| `--log-level`    |           | Logging level (debug, info, warn, error, fatal, panic). | `info`                   |
-| `--help`         | `-h`      | Show this help message and exit.                        |                          |
+| `--certbot-path` |           | Path to the `certbot` executable.                       | `certbot` (uses PATH)                                                 |
+| `--log-level`    |           | Logging level (debug, info, warn, error, fatal, panic). | `info`                                                                |
+| `--help`         | `-h`      | Show this help message and exit.                        |                                                                       |
 
 ### Environment Variables
 
@@ -174,4 +169,5 @@ The `authenticator` field in the `[[certificate]]` section determines how domain
 
 ## License
 
-This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](LICENSE).
+This project is licensed under
+the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](LICENSE).
