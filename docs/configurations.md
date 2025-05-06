@@ -3,92 +3,136 @@
 This document provides detailed information about configuring Certbot Manager through its TOML file, command-line
 arguments, and environment variables.
 
-Configuration is managed through a combination of these methods, following this precedence: **Flags > Environment
-Variables > Config File > Defaults**.
+Configuration is managed through a combination of these methods, following this precedence: **Command-Line Flags >
+Environment
+Variables > Config File > Built-in Application Defaults**.
 
 ## Command-Line Arguments
 
-Arguments passed via the command line override environment variables and the configuration file.
+Arguments passed via the command line have the highest precedence.
 
 ```text
 # Run with --help to see the most up-to-date list
 ./certbot-manager --help
 ```
 
-| Flag             | Shorthand | Description                                             | Default                                                               |
-|------------------|-----------|---------------------------------------------------------|-----------------------------------------------------------------------|
-| `--config`       | `-c`      | Path to the TOML configuration file.                    | `/app/config.toml` (in Docker) / `./config.toml` (standalone default) |
-| `--certbot-path` |           | Path to the `certbot` executable.                       | `certbot` (uses PATH)                                                 |
-| `--log-level`    |           | Logging level (debug, info, warn, error, fatal, panic). | `info`                                                                |
-| `--help`         | `-h`      | Show this help message and exit.                        |                                                                       |
+| Flag             | Shorthand | Description                                             | Default (Application Level) |
+|------------------|-----------|---------------------------------------------------------|-----------------------------|
+| `--config`       | `-c`      | Path to the TOML configuration file.                    | `./config.toml`             |
+| `--certbot-path` |           | Path to the `certbot` executable.                       | `certbot` (uses PATH)       |
+| `--log-level`    |           | Logging level (debug, info, warn, error, fatal, panic). | `info`                      |
+| `--help`         | `-h`      | Show this help message and exit.                        |                             |
 
 ## Configuration TOML File (`config.toml`)
 
-This file defines the certificates to manage and global/specific settings. The application looks for the file path
-specified by the `--config` flag (default: `./config.toml` when run standalone, `/app/config.toml` is the typical mount
-point in Docker).
+The primary configuration is done via a TOML file. It defines global default settings and settings for each individual
+certificate to be managed. The application looks for the file path specified by the `--config` flag.
 
 **Structure:**
 
-* `[globals]`: Default settings applied to all certificates unless overridden.
-* `[[certificate]]`: Defines settings for a specific certificate request (can have multiple blocks for multiple
-  certificates).
+* `[globals]`: Defines default settings that apply to all certificates.
+* `[[certificate]]`: Defines settings for a specific certificate. Settings here override those in `[globals]`.
 
-### `[globals]` Section Fields
+### Common Configuration Fields
 
-These settings apply to all `[[certificate]]` blocks unless explicitly overridden within a specific block.
+These fields can be set both in the `[globals]` section (to act as defaults for all certificates) and in
+each `[[certificate]]` section (to override the global setting for that specific certificate).
 
-| Key                     | Required    | Description                                                                  | Example                      | Default                     |
-|-------------------------|-------------|------------------------------------------------------------------------------|------------------------------|-----------------------------|
-| `email`                 | Yes         | Default contact email for Let's Encrypt registration/recovery.               | `"admin@example.com"`        | (None - Must be set)        |
-| `cmd`                   | No          | Default subcommand to run on certbot (`certonly`, `run`, `enhance`, `none`). | `"certonly"`                 | `"certonly"`                |
-| `webroot_path`          | No          | Default path for `webroot` authenticator's ACME challenges.                  | `"/var/www/acme-challenge"`  | `"/var/www/acme-challenge"` |
-| `staging`               | No          | Use Let's Encrypt staging server. Recommended for testing.                   | `true`                       | `false`                     |
-| `key_type`              | No          | Preferred key type (`ecdsa` or `rsa`). If empty, Certbot's default is used.  | `"ecdsa"`                    | `""`                        |
-| `renewal_cron`          | No          | Cron expression for periodic renewal checks.                                 | `"0 0 3 * * *"` (3 AM daily) | `"0 0 0,12 * * *"`          |
-| `initial_force_renewal` | No          | Use `--force-renewal` on the first run for each certificate.                 | `true`                       | `false`                     |
-| `no_eff_email`          | No          | Disable EFF mailing list signup when registering.                            | `false`                      | `true`                      |
- <!--                    | `agree_tos` | No                                                                           | Agree to Let's Encrypt ToS.  | `true`                      | `true` (enforced)         | -->
+| Key                       | TOML Type | Required (Context)  | Description                                                                                                         | Example                            | Default (App Level) |
+|---------------------------|-----------|---------------------|---------------------------------------------------------------------------------------------------------------------|------------------------------------|---------------------|
+| `cmd`                     | String    | No                  | Certbot subcommand to run (`certonly`, `run`, `enhance`, `none`).                                                   | `"certonly"`                       | `"certonly"`        |
+| `email`                   | String    | Yes (Overall)       | Contact email for Let's Encrypt. Must be set either in `[globals]` or in every `[[certificate]]`.                   | `"admin@example.com"`              | None                |
+| `webroot_path`            | String    | No (If not webroot) | Path for `webroot` authenticator's ACME challenges. Required if `authenticator` is `webroot`.                       | `"/var/www/acme-challenge"`        | None                |
+| `staging`                 | Boolean   | No                  | Use Let's Encrypt staging server. Recommended for testing.                                                          | `true`                             | `true`              |
+| `no_eff_email`            | Boolean   | No                  | Disable EFF mailing list signup when registering.                                                                   | `false`                            | `true`              |
+| `key_type`                | String    | No                  | Preferred key type (`ecdsa` or `rsa`). If empty, Certbot's default is used.                                         | `"ecdsa"`                          | None                |
+| `initial_force_renewal`   | Boolean   | No                  | Use `--force-renewal` on the first run for this certificate context.                                                | `true`                             | None                |
+| `args`                    | String    | No                  | **Raw string** of additional arguments passed *directly* to Certbot. Useful for flags not yet implemented directly. | `"--preferred-challenges http-01"` | None                |
+| `authenticator`           | String    | No                  | Certbot authenticator method. See [Supported Authenticators](#supported-authenticators) in the main README.         | `"dns-duckdns"`                    | None                |
+| `dns_propagation_seconds` | Integer   | No (If not DNS)     | Wait time (seconds) for DNS challenges to propagate. Used by DNS authenticators.                                    | `60`                               | None                |
+| `duckdns_token`           | String    | No (If not DuckDNS) | DuckDNS API token. Value here takes precedence for this specific certificate or global setting.                     | `"123456-78910"`                   | None                |
 
-### `[[certificate]]` Section Fields
+### `[globals]` Section Specific Fields
 
-Each `[[certificate]]` block defines a separate request to Certbot.
+These fields are specific to the `[globals]` section and define application-wide behavior.
 
-| Key                       | Required | Description                                                                                                                                        | Example                              | Default                          |
-|---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|----------------------------------|
-| `domains`                 | Yes      | List of domain names for this certificate (SANs). The first domain is the primary name for the certificate lineage.                                | `["example.com", "www.example.com"]` | (None - Must be set)             |
-| `cmd`                     | No       | Override the global subcommand for this specific certificate (`certonly`, `run`, `enhance`, `none`).                                               | `"run"`                              | (Global `cmd`)                   |
-| `args`                    | No       | **Raw string** of additional arguments passed *directly* to Certbot for this certificate only. Very useful if an argument was not yet implemented. | `"--preferred-challenges http-01"`   | `""`                             |
-| `authenticator`           | No       | Certbot authenticator for this certificate. See [Supported Authenticators](#supported-authenticators) in the main README.                          | `"dns-duckdns"`                      | `"webroot"`                      |
-| `dns_propagation_seconds` | No       | Wait time (seconds) for DNS challenges to propagate. Used by DNS authenticators.                                                                   | `120`                                | `60`                             |
-| `email`                   | No       | Override global email for this specific certificate.                                                                                               | `"specific@example.com"`             | (Global `email`)                 |
-| `webroot_path`            | No       | Override global `webroot_path` (only used if this certificate's authenticator is `webroot`).                                                       | `"/var/www/specific-app"`            | (Global `webroot_path`)          |
-| `staging`                 | No       | Override global staging setting for this specific certificate.                                                                                     | `true`                               | (Global `staging`)               |
-| `key_type`                | No       | Override global key type for this specific certificate.                                                                                            | `"rsa"`                              | (Global `key_type`)              |
-| `initial_force_renewal`   | No       | Override global initial force renewal setting for this specific certificate.                                                                       | `true`                               | (Global `initial_force_renewal`) |
+| Key            | TOML Type | Required | Description                                  | Example            | Default (App Level) |
+|----------------|-----------|----------|----------------------------------------------|--------------------|---------------------|
+| `renewal_cron` | String    | Yes      | Cron expression for periodic renewal checks. | `"0 0 0,12 * * *"` | None                |
 
-See the example [config.toml](../../config.toml.example) in the project root for detailed structure and
+### `[[certificate]]` Section Specific Fields
+
+These fields are specific to each `[[certificate]]` block.
+
+| Key       | TOML Type        | Required | Description                                                                                                         | Example                              |
+|-----------|------------------|----------|---------------------------------------------------------------------------------------------------------------------|--------------------------------------|
+| `domains` | Array of Strings | Yes      | List of domain names for this certificate (SANs). The first domain is the primary name for the certificate lineage. | `["example.com", "www.example.com"]` |
+
+**Configuration Override Logic (within TOML):**
+
+1. The application first looks for a "Common Configuration Field" setting within a specific `[[certificate]]` block.
+2. If the field is not found in the `[[certificate]]` block, it then looks for that field in the `[globals]` block.
+3. If the field is not found in `[globals]` either, the application's built-in "Default (App Level)" for that field will
+   be used (as listed in the "Common Configuration Fields" table).
+
+See the example [config.toml](../example.config.toml) in the project root for detailed structure and
 comments. <!-- Adjust path as needed -->
 
 ## Environment Variables
 
-Set these in your shell, via a `.env` file used by Docker Compose, or directly in the `environment:` section
-of `docker-compose.yml`. Environment variables override values from the TOML configuration file.
+Environment variables provide a way to configure `certbot-manager` dynamically, often useful for secrets or for
+overriding settings without modifying the configuration file. **Values set via environment variables will override
+corresponding values defined in the TOML configuration file.**
 
-| Environment Variable                          | Corresponds to Config Key                 | Description                                                                                                       |
-|-----------------------------------------------|-------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `DUCKDNS_TOKEN`                               | (Specific to `dns-duckdns` authenticator) | API token for your DuckDNS account. Required if using the `dns-duckdns` authenticator for any certificate.        |
-| `CERTBOT_MANAGER_GLOBALS_EMAIL`               | `globals.email`                           | Overrides the default email.                                                                                      |
-| `CERTBOT_MANAGER_GLOBALS_CMD`                 | `globals.cmd`                             | Overrides the default Certbot command.                                                                            |
-| `CERTBOT_MANAGER_GLOBALS_WEBROOTPATH`         | `globals.webroot_path`                    | Overrides the default webroot path.                                                                               |
-| `CERTBOT_MANAGER_GLOBALS_STAGING`             | `globals.staging`                         | Overrides the default staging flag (e.g., `"true"` or `"false"`).                                                 |
-| `CERTBOT_MANAGER_GLOBALS_KEYTYPE`             | `globals.key_type`                        | Overrides the default key type.                                                                                   |
-| `CERTBOT_MANAGER_GLOBALS_RENEWALCRON`         | `globals.renewal_cron`                    | Overrides the cron expression for renewals.                                                                       |
-| `CERTBOT_MANAGER_GLOBALS_INITIALFORCERENEWAL` | `globals.initial_force_renewal`           | Overrides the initial force renewal flag.                                                                         |
-| `CERTBOT_MANAGER_GLOBALS_NOEFFEMAIL`          | `globals.no_eff_email`                    | Overrides the no EFF email flag.                                                                                  |
-| `CERTBOT_MANAGER_CERTBOTPATH`                 | (Command line flag equivalent)            | Overrides the path to the Certbot executable.                                                                     |
-| `CERTBOT_MANAGER_LOGLEVEL`                    | (Command line flag equivalent)            | Overrides the logging level.                                                                                      |
-| `CERTBOT_MANAGER_CONFIG`                      | (Command line flag equivalent)            | Overrides the path to the config file (less common to set via env var if using the flag or default volume mount). |
+| Environment Variable        | Overrides                                                         | Description                                                                                                                                                                         |
+|-----------------------------|-------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CERTBOT_MANAGER_GLOBALS_*` | TOML key: `globals.<FIELD_NAME>` or `globals.<COMMON_FIELD_NAME>` | Overrides any field within the `[globals]` section of your `config.toml`. For example, to override `globals.renewal_cron`, use `CERTBOT_MANAGER_GLOBALS_RENEWALCRON="0 0 1 * * *"`. |
 
-> **Note:** For boolean environment variables, use string values like `"true"` or `"false"`. For nested TOML keys (
-> like `globals.email`), use underscores in the environment variable name as shown (`CERTBOT_MANAGER_GLOBALS_EMAIL`).
+**How to Set Environment Variables:**
+
+* **In your shell (for standalone usage):**
+  ```bash
+  export CERTBOT_MANAGER_GLOBALS_DUCKDNS_TOKEN="123456-78910"
+  export CERTBOT_MANAGER_GLOBALS_EMAIL="override@example.com"
+  ./certbot-manager --config=./config.toml
+  ```
+* **Using a `.env` file (often used with Docker Compose but can be sourced by shell scripts too):**
+  Create a file named `.env` in your project directory:
+  ```env
+  CERTBOT_MANAGER_GLOBALS_DUCKDNS_TOKEN=123456-78910
+  CERTBOT_MANAGER_GLOBALS_EMAIL=override@example.com
+  ```
+  If using Docker Compose, it will typically pick this up automatically. For standalone, you might source
+  it: `source .env && ./certbot-manager ...`
+* **Directly in Docker Compose (if using Docker):**
+  ```yaml
+  # docker-compose.yml
+  services:
+    certbot_manager:
+      # ...
+      environment:
+        CERTBOT_MANAGER_GLOBALS_DUCKDNS_TOKEN: "123456-78910"
+        CERTBOT_MANAGER_GLOBALS_EMAIL: "override@example.com"
+  ```
+
+**Pattern for `CERTBOT_MANAGER_GLOBALS_*` Variables:**
+
+To override a key within the `[globals]` section of your `config.toml` file using an environment variable:
+
+1. Start with the prefix `CERTBOT_MANAGER_GLOBALS_`.
+2. Append the TOML key name (as defined for the "Common Configuration Fields" or "Globals Specific Fields",
+   e.g., `email`, `webroot_path`, `renewal_cron`) in `UPPERCASE`.
+
+**Examples for `[globals]` overrides:**
+
+* To set `globals.email`:
+  `CERTBOT_MANAGER_GLOBALS_EMAIL="admin@example.com"`
+* To set `globals.staging` (boolean values are strings like `"true"` or `"false"`):
+  `CERTBOT_MANAGER_GLOBALS_STAGING="true"`
+* To set `globals.renewal_cron`:
+  `CERTBOT_MANAGER_GLOBALS_RENEWALCRON="0 0 1 * * *"`
+
+> **Note:**
+> * For boolean environment variables, use string values like `"true"` or `"false"`.
+> * Environment variables for specific certificate blocks (e.g., `CERTBOT_MANAGER_CERTIFICATES_0_EMAIL`) are not
+    currently supported; use the TOML file for per-certificate overrides.

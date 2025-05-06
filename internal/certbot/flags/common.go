@@ -50,8 +50,8 @@ type StagingFlag struct{}
 func init() { Register(&StagingFlag{}) }
 
 func (f *StagingFlag) GenerateArgs(certCfg config.Certificate, globalCfg config.Globals) ([]string, error) {
-	isStaging := ResolveBoolPtr(certCfg.Staging, globalCfg.Staging) // Use helper
-	if isStaging {
+	isStaging := ResolveBoolPtr(certCfg.Staging, globalCfg.Staging)
+	if isStaging != nil && *isStaging {
 		return []string{"--staging"}, nil
 	}
 	return nil, nil
@@ -64,8 +64,8 @@ type NoEffEmailFlag struct{}
 func init() { Register(&NoEffEmailFlag{}) }
 
 func (f *NoEffEmailFlag) GenerateArgs(certCfg config.Certificate, globalCfg config.Globals) ([]string, error) {
-	noEffEmail := ResolveBoolPtr(nil, globalCfg.NoEffEmail)
-	if noEffEmail {
+	noEffEmail := ResolveBoolPtr(certCfg.NoEffEmail, globalCfg.NoEffEmail)
+	if noEffEmail != nil && *noEffEmail {
 		return []string{"--no-eff-email"}, nil
 	}
 	return nil, nil
@@ -78,7 +78,7 @@ type KeyTypeFlag struct{}
 func init() { Register(&KeyTypeFlag{}) }
 
 func (f *KeyTypeFlag) GenerateArgs(certCfg config.Certificate, globalCfg config.Globals) ([]string, error) {
-	keyType := ResolveString(certCfg.KeyType, globalCfg.KeyType) // Use helper
+	keyType := ResolveString(certCfg.KeyType, globalCfg.KeyType)
 	if keyType != "" {
 		return []string{"--key-type", keyType}, nil
 	}

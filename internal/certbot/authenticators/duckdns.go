@@ -2,7 +2,6 @@ package authenticators
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
 	"certbot-manager/internal/certbot/flags" // Import flags for helpers
@@ -14,9 +13,9 @@ type DuckDNSAuthenticator struct{}
 func init() { Register("dns-duckdns", &DuckDNSAuthenticator{}) }
 
 func (p *DuckDNSAuthenticator) BuildArgs(certCfg config.Certificate, globalCfg config.Globals) ([]string, error) {
-	token := os.Getenv("DUCKDNS_TOKEN")
+	token := flags.ResolveString(certCfg.DuckDNSToken, globalCfg.DuckDNSToken)
 	if token == "" {
-		return nil, fmt.Errorf("authenticator 'dns-duckdns' requires the DUCKDNS_TOKEN environment variable")
+		return nil, fmt.Errorf("authenticator 'dns-duckdns' requires the duckdns_token to be specified")
 	}
 
 	args := []string{
@@ -25,8 +24,12 @@ func (p *DuckDNSAuthenticator) BuildArgs(certCfg config.Certificate, globalCfg c
 	}
 
 	// Use helper to resolve propagation seconds
-	propagationSeconds := flags.ResolveIntPtr(certCfg.DNSPropagationSeconds, config.Defaults.DNSPropagationSeconds)
+	propagationSecondsPtr := flags.ResolveIntPtr(certCfg.DNSPropagationSeconds, globalCfg.DNSPropagationSeconds)
+	if propagationSecondsPtr == nil {
+		return nil, fmt.Errorf("authenticator 'dns-duckdns' requires the dns_propagation_seconds to be specified")
+	}
 
+	propagationSeconds := *propagationSecondsPtr
 	if propagationSeconds > 0 {
 		args = append(args, "--dns-duckdns-propagation-seconds", strconv.Itoa(propagationSeconds))
 	}

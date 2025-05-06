@@ -53,7 +53,11 @@ func (b *ArgsBuilder) Build() ([]string, error) {
 	}
 
 	// Get and Apply Authenticator Args
-	authenticatorName := flags.ResolveAuthenticatorName(b.certCfg, b.globalCfg) // Use helper for consistency
+	authenticatorName, err := flags.ResolveAuthenticatorName(b.certCfg, b.globalCfg) // Use helper for consistency
+	if err != nil {
+		return nil, fmt.Errorf("missing authenticator name (domains: %v): %w", b.certCfg.Domains, err)
+	}
+
 	plugin, err := authenticators.Get(authenticatorName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get authenticator plugin for '%s' (domains: %v): %w", authenticatorName, b.certCfg.Domains, err)
