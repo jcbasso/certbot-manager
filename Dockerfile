@@ -1,4 +1,23 @@
-FROM golang:1.24.1-alpine AS builder
+FROM python:3.12-alpine AS pybuilder
+
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    libffi-dev \
+    python3-dev
+
+WORKDIR /wheels
+
+RUN pip wheel --no-cache-dir --wheel-dir=/wheels certbot-dns-duckdns==1.6
+
+FROM certbot/certbot:v4.0.0 AS certbot-duckdns-base
+
+COPY --from=pybuilder /wheels /wheels
+
+RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/*.whl \
+    && rm -rf /wheels
+
+FROM golang:1.24.1-alpine AS gobuilder
 
 WORKDIR /build
 
@@ -9,23 +28,10 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/certbot-manager ./cmd/certbot-manager
 
-FROM certbot/certbot:latest
+FROM certbot-duckdns-base AS final
 
-COPY --from=builder /app/certbot-manager /usr/local/bin/certbot-manager
+COPY --from=gobuilder /app/certbot-manager /usr/local/bin/certbot-manager
 RUN chmod +x /usr/local/bin/certbot-manager
-
-# Install the DuckDNS plugin using pip
-RUN apk add --no-cache --virtual .build-deps \
-        gcc \
-        musl-dev \
-        libffi-dev \
-        python3-dev \
-    && pip install --no-cache-dir certbot-dns-duckdns \
-    && pip install certbot_dns_duckdns -U \
-    && apk del .build-deps # Clean up build dependencies
-
-# Create directory for webroot challenges (permissions handled by volume mount ideally)
-# RUN mkdir -p /var/www/acme-challenge && chown nobody:nogroup /var/www/acme-challenge
 
 WORKDIR /app
 
