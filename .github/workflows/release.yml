@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   publish_release:
@@ -57,6 +58,45 @@ jobs:
           echo "final_tag=$FINAL_TAG" >> $GITHUB_OUTPUT
           echo "tag_exists=false" >> $GITHUB_OUTPUT
 
+      # --- Docker Build Steps ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata for Final Release
+        id: meta_final
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.final_tag.outputs.final_tag }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.final_tag.outputs.final_tag }}
+
+      - name: Build and push Final Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta_final.outputs.tags }}
+          labels: ${{ steps.meta_final.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Publish ---
       - name: Publish Release
         # Only publish if the tag didn't already exist
         if: steps.final_tag.outputs.tag_exists == 'false'
