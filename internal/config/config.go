@@ -10,17 +10,39 @@ import (
 	"github.com/spf13/viper"
 )
 
-const (
-	DefaultRenewalCron           = "0 0 0,12 * * *"
-	DefaultWebrootPath           = "/var/www/acme-challenge"
-	DefaultAuthenticator         = "webroot"
-	DefaultDNSPropagationSeconds = 60
-	defaultConfigFilePath        = "./config.toml"
-	DefaultLogLevel              = "info"
-)
-
 // Viper instance (package level)
 var v *viper.Viper
+
+var (
+	Defaults = Default{
+		Cmd:                   "certonly",
+		RenewalCron:           "0 0 0,12 * * *",
+		WebrootPath:           "/var/www/acme-challenge",
+		Staging:               false,
+		NoEffEmail:            true,
+		KeyType:               "",
+		InitialForceRenewal:   false,
+		Authenticator:         "webroot",
+		DNSPropagationSeconds: 60,
+		ConfigFilePath:        "./config.toml",
+		LogLevel:              "info",
+	}
+)
+
+// Default holds default settings
+type Default struct {
+	Cmd                   string
+	RenewalCron           string
+	WebrootPath           string
+	Staging               bool
+	NoEffEmail            bool
+	KeyType               string
+	InitialForceRenewal   bool
+	Authenticator         string
+	DNSPropagationSeconds int
+	ConfigFilePath        string
+	LogLevel              string
+}
 
 // Config holds the application configuration
 type Config struct {
@@ -32,6 +54,7 @@ type Config struct {
 
 // Globals holds global settings
 type Globals struct {
+	Cmd                 string `mapstructure:"cmd"`
 	Email               string `mapstructure:"email"`
 	WebrootPath         string `mapstructure:"webroot_path"`
 	Staging             bool   `mapstructure:"staging"`
@@ -43,6 +66,7 @@ type Globals struct {
 
 // Certificate represents a single certificate request
 type Certificate struct {
+	Cmd                 string   `mapstructure:"cmd"`
 	Domains             []string `mapstructure:"domains"`
 	Email               string   `mapstructure:"email"`
 	WebrootPath         string   `mapstructure:"webroot_path"`
@@ -52,16 +76,16 @@ type Certificate struct {
 	Args                string   `mapstructure:"args"`
 	Authenticator       string   `mapstructure:"authenticator"`
 	// Seconds to wait for DNS propagation (only used if authenticator is dns-*)
-	DNSPropagationSeconds *int `mapstructure:"dns_propagation_seconds"` // Pointer for optional override
+	DNSPropagationSeconds *int `mapstructure:"dns_propagation_seconds"`
 }
 
 // Load initializes Viper and loads the configuration.
 func Load() (*Config, error) {
 	v = viper.New()
 
-	pflag.StringP("config", "c", defaultConfigFilePath, "Path to the configuration file (e.g., /app/config.toml)")
-	pflag.String("certbot-path", "", "Path to the certbot executable")
-	pflag.String("log-level", DefaultLogLevel, "Logging level (debug, info, warn, error, fatal, panic)")
+	pflag.StringP("config", "c", Defaults.ConfigFilePath, "Path to the configuration file (e.g., /app/config.toml)")
+	pflag.String("certbot-path", "certbot", "Path to the certbot executable")
+	pflag.String("log-level", Defaults.LogLevel, "Logging level (debug, info, warn, error, fatal, panic)")
 	help := pflag.BoolP("help", "h", false, "Show help message")
 
 	pflag.Parse()
@@ -78,7 +102,7 @@ func Load() (*Config, error) {
 
 	// Args
 	v.SetDefault("certbotPath", "certbot")
-	v.SetDefault("logLevel", DefaultLogLevel)
+	v.SetDefault("logLevel", Defaults.LogLevel)
 
 	if err := v.BindPFlag("certbotPath", pflag.Lookup("certbot-path")); err != nil {
 		log.Printf("Warning: could not bind certbot-path flag: %v", err) // Use standard log before logrus setup
@@ -87,12 +111,14 @@ func Load() (*Config, error) {
 		log.Printf("Warning: could not bind log-level flag: %v", err)
 	}
 
-	// Globals
-	v.SetDefault("globals.webroot_path", DefaultWebrootPath)
-	v.SetDefault("globals.staging", false)
-	v.SetDefault("globals.no_eff_email", true)
-	v.SetDefault("globals.initial_force_renewal", false)
-	v.SetDefault("globals.renewal_cron", DefaultRenewalCron)
+	// Default
+	v.SetDefault("globals.cmd", Defaults.Cmd)
+	v.SetDefault("globals.webroot_path", Defaults.WebrootPath)
+	v.SetDefault("globals.staging", Defaults.Staging)
+	v.SetDefault("globals.no_eff_email", Defaults.NoEffEmail)
+	v.SetDefault("globals.key_type", Defaults.KeyType)
+	v.SetDefault("globals.initial_force_renewal", Defaults.InitialForceRenewal)
+	v.SetDefault("globals.renewal_cron", Defaults.RenewalCron)
 
 	// Env Vars
 	v.SetEnvPrefix("CERTBOT_MANAGER")
@@ -127,8 +153,8 @@ func Load() (*Config, error) {
 	cfg.CertbotPath = v.GetString("certbotPath")
 
 	if cfg.Globals.RenewalCron == "" {
-		log.Printf("Warning: Globals.RenewalCron is empty, falling back to default: %s", DefaultRenewalCron)
-		cfg.Globals.RenewalCron = DefaultRenewalCron // Use reverted field
+		log.Printf("Warning: Globals.RenewalCron is empty, falling back to default: %s", Defaults.RenewalCron)
+		cfg.Globals.RenewalCron = Defaults.RenewalCron
 	}
 
 	return &cfg, nil

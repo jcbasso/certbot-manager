@@ -34,5 +34,5 @@ func ResolveAuthenticatorName(certCfg config.Certificate, globalCfg config.Globa
 		return certCfg.Authenticator
 	}
 	// Fallback to a hardcoded default if not specified
-	return config.DefaultAuthenticator
+	return config.Defaults.Authenticator
 }

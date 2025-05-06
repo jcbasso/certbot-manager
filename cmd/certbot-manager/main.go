@@ -49,7 +49,6 @@ func main() {
 		)
 	}
 
-	// --- Proceed only if initial requests were successful ---
 	logrus.Info("Initial certificates processing completed successfully.")
 
 	// --- Define the Renewal Job Function ---

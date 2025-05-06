@@ -4,7 +4,7 @@
 
 <!-- TODO: Replace with actual badge SVGs or URLs -->
 [![go version](docs/assets/badge/go-version-badge.svg)](go.mod)
-[![release](docs/assets/badge/release-badge.svg)](https://github.com/YOUR_USERNAME/YOUR_REPO/releases)
+[![release](docs/assets/badge/release-badge.svg)](https://github.com/jcbasso/certbot-manager/releases)
 [![CC BY-NC-SA 4.0](docs/assets/badge/license.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 Go application to automatically obtain and renew multiple Let's Encrypt certificates using Certbot, configured via a
@@ -36,8 +36,9 @@ TOML file. Designed to run alongside a reverse proxy like Nginx.
 > standalone.
 > See [Certbot Installation](https://certbot.eff.org/instructions) for instructions.
 
-1. Download the latest binary from the [Releases](https://github.com/YOUR_USERNAME/YOUR_REPO/releases) page.
-2. Create your `config.toml` file (see [Configuration](#configuration)).
+1. Download the latest binary from the [Releases](https://github.com/jcbasso/certbot-manager/releases) page.
+2. Create your `config.toml` file (see [Configuration](#configuration) section below and the
+   detailed [Configuration Details](docs/configurations.md) document).
 3. Ensure required environment variables (like `DUCKDNS_TOKEN`) are set if needed.
 4. Run the binary:
    ```bash
@@ -73,98 +74,59 @@ volumes:
 
 **Steps:**
 
-1. Create your `config.toml` file in the same directory as your `docker-compose.yml` (or adjust the volume mount).
+1. Create your `config.toml` file in the same directory as your `docker-compose.yml` (or adjust the volume mount). See
+   the [Configuration](#configuration) summary below and the detailed [Configuration Details](docs/configurations.md)
+   document.
 2. If using DNS authenticators requiring secrets (like DuckDNS), create a `.env` file in your project root containing
    the secrets (e.g., `DUCKDNS_TOKEN=your_secret_token`).
 3. Ensure your `docker-compose.yml` correctly defines the `certbot-manager` service and shared volumes.
-4. Run `docker compose up -d` to start the service.
+4. Run `docker compose up -d` to start the service (add `--build` if building locally).
 
 ## Configuration
 
 Configuration is managed through a combination of a TOML file, command-line arguments, and environment variables,
 following this precedence: **Flags > Environment Variables > Config File > Defaults**.
 
-### Configuration TOML File (`config.toml`)
+The primary configuration is done via a TOML file. This file allows you to define:
 
-This file defines the certificates to manage and global/specific settings. The application looks for the file path
-specified by the `--config` flag (default: `./config.toml` when run standalone, `/app/config.toml` is the typical mount
-point in Docker).
-
-**Structure:**
-
-* `[globals]`: Default settings applied to all certificates unless overridden.
-* `[[certificate]]`: Defines settings for a specific certificate request (can have multiple blocks for multiple
-  certificates).
-
-**Key `[globals]` Fields:**
-
-| Key                     | Required | Description                                                                   | Example                      |
-|-------------------------|----------|-------------------------------------------------------------------------------|------------------------------|
-| `email`                 | Yes      | Default contact email for Let's Encrypt registration/recovery.                | `"admin@example.com"`        |
-| `webroot_path`          | No       | Default path for `webroot` authenticator's ACME challenges.                   | `"/var/www/acme-challenge"`  |
-| `staging`               | No       | Use Let's Encrypt staging server (default: `false`). Recommended for testing. | `true`                       |
-| `key_type`              | No       | Preferred key type (`ecdsa` or `rsa`, default: `""` -> certbot default).      | `"ecdsa"`                    |
-| `renewal_cron`          | No       | Cron expression for periodic renewal checks.                                  | `"0 0 3 * * *"` (3 AM daily) |
-| `initial_force_renewal` | No       | Use `--force-renewal` on first run (default: `false`).                        | `true`                       |
-| `no_eff_email`          | No       | Disable EFF mailing list signup (default: `true`).                            | `true`                       |
-
-**Key `[[certificate]]` Fields:**
-
-| Key                       | Required | Description                                                                                                                                        | Example                              |
-|---------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
-| `domains`                 | Yes      | List of domain names for this certificate (SANs). First is primary name.                                                                           | `["example.com", "www.example.com"]` |
-| `authenticator`           | No       | Certbot authenticator for this cert (default: `webroot`). See [Supported Authenticators](#supported-authenticators).                               | `"dns-duckdns"`                      |
-| `args`                    | No       | **Raw string** of additional arguments passed *directly* to certbot for this certificate only. Very useful if an argument was yet not implemented. | `"--preferred-challenges http-01"`   |
-| `dns_propagation_seconds` | No       | Wait time (seconds) for DNS challenges (default: `60`). Used by DNS authenticators.                                                                | `60`                                 |
-| `email`                   | No       | Override global email.                                                                                                                             | `"specific@example.com"`             |
-| `webroot_path`            | No       | Override global `webroot_path` (only used if authenticator is `webroot`).                                                                          | `"/var/www/specific-app"`            |
-| `staging`                 | No       | Override global staging setting.                                                                                                                   | `true`                               |
-| `key_type`                | No       | Override global key type.                                                                                                                          | `"rsa"`                              |
-| `initial_force_renewal`   | No       | Override global initial force renewal setting.                                                                                                     | `true`                               |
+* **`[globals]`**: Default settings that apply to all certificates unless overridden. This includes settings like your
+  default email address for Let's Encrypt, whether to use the staging environment, the Certbot command to run (
+  e.g., `certonly`), the cron schedule for renewals, and more.
+* **`[[certificate]]`**: One or more blocks, each defining a specific certificate to be managed. Here you list
+  the `domains` for the certificate, and you can override any of the global settings (like email, staging,
+  authenticator, etc.) or provide specific Certbot arguments for this certificate only.
 
 > [!TIP]
-> See the example [config.toml](./example-config.toml) for detailed structure.
+> For a comprehensive list of all configuration options, their descriptions, defaults, and examples, please see the
+**[Configuration Details](docs/configurations.md)** document.
+>
+> An example configuration file can also be found
+> at [config.toml.example](./config.toml.example). <!-- TODO: Create this example file -->
 
-### Command-Line Arguments
+Key aspects you will configure include:
 
-Arguments passed via the command line override environment variables and the configuration file.
-
-```text
-# See help message for current flags and defaults
-./certbot-manager --help
-```
-
-| Flag             | Shorthand | Description                                             | Default                                                               |
-|------------------|-----------|---------------------------------------------------------|-----------------------------------------------------------------------|
-| `--config`       | `-c`      | Path to the TOML configuration file.                    | `/app/config.toml` (in Docker) / `./config.toml` (standalone default) |
-| `--certbot-path` |           | Path to the `certbot` executable.                       | `certbot` (uses PATH)                                                 |
-| `--log-level`    |           | Logging level (debug, info, warn, error, fatal, panic). | `info`                                                                |
-| `--help`         | `-h`      | Show this help message and exit.                        |                                                                       |
-
-### Environment Variables
-
-Set these in your shell, via a `.env` file used by Docker Compose, or directly in the `environment:` section
-of `docker-compose.yml`.
-
-| Environment Variable | Required                     | Description                                                                                                                                                              |
-|----------------------|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `DUCKDNS_TOKEN`      | Yes (if using `dns-duckdns`) | API token for your DuckDNS account.                                                                                                                                      |
-| `CERTBOT_MANAGER_*`  | No                           | Overrides corresponding config values (e.g., `CERTBOT_MANAGER_GLOBALS_EMAIL=...`, `CERTBOT_MANAGER_LOGLEVEL=debug`). Follow Viper's key structure (use `_` for nesting). |
+* **Domains:** The list of domain names for each certificate.
+* **Authenticator:** The method Certbot will use to prove you control the domains (e.g., `webroot` or `dns-duckdns`).
+* **Certbot Command:** The main Certbot action to perform (e.g., `certonly` for just getting certs, or `run` if you want
+  Certbot to also install them, though this is less common when `certbot-manager` is paired with a separate proxy).
+* **Custom Arguments:** Pass any raw Certbot arguments for fine-grained control.
 
 ## Supported Authenticators
 
-The `authenticator` field in the `[[certificate]]` section determines how domain ownership is verified:
+The `authenticator` field in the `[[certificate]]` section of your `config.toml` determines how domain ownership is
+verified:
 
-* `webroot` (Default): Uses HTTP-01 challenge. Requires web server configuration.
-* `dns-duckdns`: Uses DNS-01 challenge
-  via [infinityofspace/certbot_dns_duckdns](https://github.com/infinityofspace/certbot_dns_duckdns).
-  Requires `DUCKDNS_TOKEN` env var.
+* `webroot` (Default): Uses the HTTP-01 challenge. Requires your web server (e.g., Nginx) to be configured to serve
+  files from the `webroot_path` for the `/.well-known/acme-challenge/` URI.
+* `dns-duckdns`: Uses the DNS-01 challenge via
+  the [infinityofspace/certbot_dns_duckdns](https://github.com/infinityofspace/certbot_dns_duckdns) plugin. Requires
+  the `DUCKDNS_TOKEN` environment variable to be set.
 
 <!-- TODO: Add more authenticators here as they are implemented -->
 
 ## Development
 
-* Use specified [go version](#certbot-manager).
+* Requires Go version specified in [go.mod](go.mod).
 * Follow [git branching model & release specifications](docs/git-branching-model.md).
 
 ## License
