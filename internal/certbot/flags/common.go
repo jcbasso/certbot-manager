@@ -32,6 +32,17 @@ func (f *AgreeTosFlag) GenerateArgs(_ config.Certificate, _ config.Globals) ([]s
 	return []string{"--agree-tos"}, nil
 }
 
+// --- Non Interactive Flag ---
+
+type NonInteractiveFlag struct{}
+
+func init() { Register(&NonInteractiveFlag{}) }
+
+func (f *NonInteractiveFlag) GenerateArgs(_ config.Certificate, _ config.Globals) ([]string, error) {
+	//	Automation requires true. Forcing '--non-interactive'
+	return []string{"--non-interactive"}, nil
+}
+
 // --- Staging Flag ---
 
 type StagingFlag struct{}

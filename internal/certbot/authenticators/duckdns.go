@@ -25,7 +25,7 @@ func (p *DuckDNSAuthenticator) BuildArgs(certCfg config.Certificate, globalCfg c
 	}
 
 	// Use helper to resolve propagation seconds
-	propagationSeconds := flags.ResolveIntPtr(certCfg.DNSPropagationSeconds, config.DefaultDNSPropagationSeconds)
+	propagationSeconds := flags.ResolveIntPtr(certCfg.DNSPropagationSeconds, config.Defaults.DNSPropagationSeconds)
 
 	if propagationSeconds > 0 {
 		args = append(args, "--dns-duckdns-propagation-seconds", strconv.Itoa(propagationSeconds))

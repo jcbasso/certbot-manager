@@ -32,7 +32,12 @@ func (b *ArgsBuilder) Build() ([]string, error) {
 	}
 
 	// Base Command
-	args := []string{"certonly", "--non-interactive"}
+	cmd, err := generateCmd(b.certCfg, b.globalCfg)
+	if err != nil {
+		return nil, fmt.Errorf("error from cmd generator %s for domains %v: %w", b.certCfg.Cmd, b.certCfg.Domains, err)
+	}
+
+	args := []string{cmd}
 
 	// Apply Common Flags via Registered Generators
 	for _, generator := range flags.GetAll() {
