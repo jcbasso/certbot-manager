@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -15,33 +16,23 @@ var v *viper.Viper
 
 var (
 	Defaults = Default{
-		Cmd:                   "certonly",
-		RenewalCron:           "0 0 0,12 * * *",
-		WebrootPath:           "/var/www/acme-challenge",
-		Staging:               false,
-		NoEffEmail:            true,
-		KeyType:               "",
-		InitialForceRenewal:   false,
-		Authenticator:         "webroot",
-		DNSPropagationSeconds: 60,
-		ConfigFilePath:        "./config.toml",
-		LogLevel:              "info",
+		Staging:        true,
+		NoEffEmail:     true,
+		Cmd:            "certonly",
+		ConfigFilePath: "./config.toml",
+		CertbotPath:    "certbot",
+		LogLevel:       "info",
 	}
 )
 
 // Default holds default settings
 type Default struct {
-	Cmd                   string
-	RenewalCron           string
-	WebrootPath           string
-	Staging               bool
-	NoEffEmail            bool
-	KeyType               string
-	InitialForceRenewal   bool
-	Authenticator         string
-	DNSPropagationSeconds int
-	ConfigFilePath        string
-	LogLevel              string
+	Staging        bool
+	NoEffEmail     bool
+	Cmd            string
+	ConfigFilePath string
+	CertbotPath    string
+	LogLevel       string
 }
 
 // Config holds the application configuration
@@ -52,31 +43,31 @@ type Config struct {
 	LogLevel     string
 }
 
-// Globals holds global settings
-type Globals struct {
+type CommonConfigs struct {
 	Cmd                 string `mapstructure:"cmd"`
 	Email               string `mapstructure:"email"`
 	WebrootPath         string `mapstructure:"webroot_path"`
-	Staging             bool   `mapstructure:"staging"`
-	NoEffEmail          bool   `mapstructure:"no_eff_email"`
+	Staging             *bool  `mapstructure:"staging"`
+	NoEffEmail          *bool  `mapstructure:"no_eff_email"`
 	KeyType             string `mapstructure:"key_type"`
-	InitialForceRenewal bool   `mapstructure:"initial_force_renewal"`
-	RenewalCron         string `mapstructure:"renewal_cron"`
+	InitialForceRenewal *bool  `mapstructure:"initial_force_renewal"`
+	Args                string `mapstructure:"args"`
+	Authenticator       string `mapstructure:"authenticator"`
+	// Seconds to wait for DNS propagation (only used if authenticator is dns-*)
+	DNSPropagationSeconds *int   `mapstructure:"dns_propagation_seconds"`
+	DuckDNSToken          string `mapstructure:"duckdns_token"`
+}
+
+// Globals holds global settings
+type Globals struct {
+	RenewalCron   string `mapstructure:"renewal_cron"`
+	CommonConfigs `mapstructure:",squash"`
 }
 
 // Certificate represents a single certificate request
 type Certificate struct {
-	Cmd                 string   `mapstructure:"cmd"`
-	Domains             []string `mapstructure:"domains"`
-	Email               string   `mapstructure:"email"`
-	WebrootPath         string   `mapstructure:"webroot_path"`
-	Staging             *bool    `mapstructure:"staging"`
-	KeyType             string   `mapstructure:"key_type"`
-	InitialForceRenewal *bool    `mapstructure:"initial_force_renewal"`
-	Args                string   `mapstructure:"args"`
-	Authenticator       string   `mapstructure:"authenticator"`
-	// Seconds to wait for DNS propagation (only used if authenticator is dns-*)
-	DNSPropagationSeconds *int `mapstructure:"dns_propagation_seconds"`
+	Domains       []string `mapstructure:"domains"`
+	CommonConfigs `mapstructure:",squash"`
 }
 
 // Load initializes Viper and loads the configuration.
@@ -84,7 +75,7 @@ func Load() (*Config, error) {
 	v = viper.New()
 
 	pflag.StringP("config", "c", Defaults.ConfigFilePath, "Path to the configuration file (e.g., /app/config.toml)")
-	pflag.String("certbot-path", "certbot", "Path to the certbot executable")
+	pflag.String("certbot-path", Defaults.CertbotPath, "Path to the certbot executable")
 	pflag.String("log-level", Defaults.LogLevel, "Logging level (debug, info, warn, error, fatal, panic)")
 	help := pflag.BoolP("help", "h", false, "Show help message")
 
@@ -95,15 +86,11 @@ func Load() (*Config, error) {
 		fmt.Println("\nUsage:")
 		pflag.PrintDefaults()
 		fmt.Println("\nEnvironment Variables:")
-		fmt.Println("  DUCKDNS_TOKEN: Required if using 'dns-duckdns' authenticator.")
 		fmt.Println("  CERTBOT_MANAGER_* : Can override config values (e.g., CERTBOT_MANAGER_GLOBALS_EMAIL).")
 		os.Exit(0)
 	}
 
 	// Args
-	v.SetDefault("certbotPath", "certbot")
-	v.SetDefault("logLevel", Defaults.LogLevel)
-
 	if err := v.BindPFlag("certbotPath", pflag.Lookup("certbot-path")); err != nil {
 		log.Printf("Warning: could not bind certbot-path flag: %v", err) // Use standard log before logrus setup
 	}
@@ -111,19 +98,17 @@ func Load() (*Config, error) {
 		log.Printf("Warning: could not bind log-level flag: %v", err)
 	}
 
-	// Default
-	v.SetDefault("globals.cmd", Defaults.Cmd)
-	v.SetDefault("globals.webroot_path", Defaults.WebrootPath)
+	// Defaults
 	v.SetDefault("globals.staging", Defaults.Staging)
 	v.SetDefault("globals.no_eff_email", Defaults.NoEffEmail)
-	v.SetDefault("globals.key_type", Defaults.KeyType)
-	v.SetDefault("globals.initial_force_renewal", Defaults.InitialForceRenewal)
-	v.SetDefault("globals.renewal_cron", Defaults.RenewalCron)
+	v.SetDefault("globals.cmd", Defaults.Cmd)
 
 	// Env Vars
 	v.SetEnvPrefix("CERTBOT_MANAGER")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+	var c Config
+	bindEnvsRecursive("globals", reflect.ValueOf(&c.Globals), v)
 
 	// Config File
 	configFilePath, _ := pflag.CommandLine.GetString("config") // Use the parsed value
@@ -150,11 +135,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
 
-	cfg.CertbotPath = v.GetString("certbotPath")
-
+	// Validations
 	if cfg.Globals.RenewalCron == "" {
-		log.Printf("Warning: Globals.RenewalCron is empty, falling back to default: %s", Defaults.RenewalCron)
-		cfg.Globals.RenewalCron = Defaults.RenewalCron
+		return nil, fmt.Errorf("globals.RenewalCron is empty")
 	}
 
 	return &cfg, nil

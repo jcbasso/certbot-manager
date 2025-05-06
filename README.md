@@ -5,7 +5,7 @@
 <!-- TODO: Replace with actual badge SVGs or URLs -->
 [![go version](docs/assets/badge/go-version-badge.svg)](go.mod)
 [![release](docs/assets/badge/release-badge.svg)](https://github.com/jcbasso/certbot-manager/releases)
-[![CC BY-NC-SA 4.0](docs/assets/badge/license.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![CC BY-NC-SA 4.0](docs/assets/badge/license-badge.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
 Go application to automatically obtain and renew multiple Let's Encrypt certificates using Certbot, configured via a
 TOML file. Designed to run alongside a reverse proxy like Nginx.
@@ -84,32 +84,44 @@ volumes:
 
 ## Configuration
 
-Configuration is managed through a combination of a TOML file, command-line arguments, and environment variables,
-following this precedence: **Flags > Environment Variables > Config File > Defaults**.
+`certbot-manager` is configured primarily through a TOML file (e.g., `config.toml`). Settings can also be overridden by command-line arguments and environment variables. The order of precedence is: **Command-Line Flags > Environment Variables > Config File > Built-in Defaults**.
 
-The primary configuration is done via a TOML file. This file allows you to define:
+The `config.toml` file allows you to define global settings and then specify individual certificates to manage.
 
-* **`[globals]`**: Default settings that apply to all certificates unless overridden. This includes settings like your
-  default email address for Let's Encrypt, whether to use the staging environment, the Certbot command to run (
-  e.g., `certonly`), the cron schedule for renewals, and more.
-* **`[[certificate]]`**: One or more blocks, each defining a specific certificate to be managed. Here you list
-  the `domains` for the certificate, and you can override any of the global settings (like email, staging,
-  authenticator, etc.) or provide specific Certbot arguments for this certificate only.
+**Example `config.toml` Structure:**
+
+```toml
+# Global settings that apply to all certificates unless overridden
+[globals]
+    email = "admin@example.com"
+    renewal_cron = "0 0 0,12 * * *"
+    cmd = "certonly"
+
+# Define one or more certificates to manage
+[[certificate]]
+    domains = ["example.com", "www.example.com"]
+    authenticator = "webroot"
+    webroot_path = "/var/www/acme-challenge"
+
+[[certificate]]
+    domains = ["my-domain.duckdns.org"]
+    authenticator = "dns-duckdns"
+    duckdns_token = "123456-78910"
+    dns_propagation_seconds = "60"
+    args = "--vvv --nginx"
+```
+
+**Key Configuration Sections:**
+
+*   **`[globals]`**: Define default settings here, such as your primary email address for Let's Encrypt, whether to use the staging (test) or production environment, the default Certbot command (like `certonly`), and the cron schedule for renewal checks.
+*   **`[[certificate]]`**: Create one of these sections for each certificate you need.
+    *   List the `domains` the certificate will cover.
+    *   Specify the `authenticator` method Certbot should use to verify domain ownership (e.g., `webroot` or `dns-duckdns`).
+    *   You can also override any global settings specifically for this certificate or add custom `args` for fine-grained control over Certbot's behavior.
 
 > [!TIP]
-> For a comprehensive list of all configuration options, their descriptions, defaults, and examples, please see the
-**[Configuration Details](docs/configurations.md)** document.
->
-> An example configuration file can also be found
-> at [config.toml.example](./config.toml.example). <!-- TODO: Create this example file -->
-
-Key aspects you will configure include:
-
-* **Domains:** The list of domain names for each certificate.
-* **Authenticator:** The method Certbot will use to prove you control the domains (e.g., `webroot` or `dns-duckdns`).
-* **Certbot Command:** The main Certbot action to perform (e.g., `certonly` for just getting certs, or `run` if you want
-  Certbot to also install them, though this is less common when `certbot-manager` is paired with a separate proxy).
-* **Custom Arguments:** Pass any raw Certbot arguments for fine-grained control.
+> *   The example above is a simplified overview. For a **complete list of all configuration options**, their descriptions, default values, and details on using command-line flags and environment variables, please refer to the **[Configuration Details](docs/configurations.md)** document.
+> *   A more comprehensive example configuration file is available at [config.toml](./example.config.toml). <!-- TODO: Create/link this example file -->
 
 ## Supported Authenticators
 

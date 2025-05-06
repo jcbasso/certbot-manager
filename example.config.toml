@@ -3,11 +3,7 @@
 # =========================================
 [globals]
     email = "admin@example.com"
-    webroot_path = "/var/www/acme-challenge"
-    staging = true
-    no_eff_email = true
-    key_type = "ecdsa"
-    initial_force_renewal = false
+    cmd = "certonly"
     renewal_cron = "0 0 0,12 * * *"
 
 # =========================================
@@ -15,8 +11,12 @@
 # =========================================
 [[certificate]]
     domains = ["example.com", "www.example.com"]
+    authenticator = "webroot"
+    webroot_path = "/var/www/acme-challenge"
 
 [[certificate]]
     domains = ["my-domain.duckdns.org"]
     authenticator = "dns-duckdns"
+    duckdns_token = "123456-78910"
+    dns_propagation_seconds = "60"
     args = "--vvv --nginx"

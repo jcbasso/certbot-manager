@@ -9,8 +9,6 @@ import (
 var commandList = []string{
 	"certonly",
 	"run",
-	"enhance",
-	"none",
 }
 
 func generateCmd(certCfg config.Certificate, globalCfg config.Globals) (string, error) {
@@ -20,7 +18,7 @@ func generateCmd(certCfg config.Certificate, globalCfg config.Globals) (string, 
 	}
 
 	if !isValidCommand(cmd) {
-		return "", fmt.Errorf("unknown cmd '%s' (options: 'certonly', 'run', 'enhance', 'none')", cmd)
+		return "", fmt.Errorf("unknown cmd '%s' (options: 'certonly', 'run')", cmd)
 	}
 	return cmd, nil
 }
