@@ -54,8 +54,9 @@ type CommonConfigs struct {
 	Args                string `mapstructure:"args"`
 	Authenticator       string `mapstructure:"authenticator"`
 	// Seconds to wait for DNS propagation (only used if authenticator is dns-*)
-	DNSPropagationSeconds *int   `mapstructure:"dns_propagation_seconds"`
-	DuckDNSToken          string `mapstructure:"duckdns_token"`
+	DNSPropagationSeconds     *int   `mapstructure:"dns_propagation_seconds"`
+	CloudflareCredentialsPath string `mapstructure:"cloudflare_credentials_path"`
+	DuckDNSToken              string `mapstructure:"duckdns_token"`
 }
 
 // Globals holds global settings

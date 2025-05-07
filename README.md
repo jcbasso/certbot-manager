@@ -23,7 +23,7 @@ TOML file. Designed to run alongside a reverse proxy like Nginx.
 * Automated certificate acquisition via Certbot.
 * Automated certificate renewal via Certbot through Go cron scheduler.
 * Declarative configuration using a TOML file (`config.toml`).
-* Support for different Certbot authenticators (`webroot`, `dns-duckdns`).
+* Support for different Certbot authenticators (`webroot`, `dns-cloudflare`, `dns-duckdns`).
 * Customizable Certbot arguments per certificate.
 * Leveled logging controllable via flags or environment variables.
 * Designed for containerized environments (Docker).
@@ -130,6 +130,7 @@ verified:
 
 * `webroot` (Default): Uses the HTTP-01 challenge. Requires your web server (e.g., Nginx) to be configured to serve
   files from the `webroot_path` for the `/.well-known/acme-challenge/` URI.
+* `dns-cloudflare`: Uses the DNS-01 challenge.
 * `dns-duckdns`: Uses the DNS-01 challenge via
   the [infinityofspace/certbot_dns_duckdns](https://github.com/infinityofspace/certbot_dns_duckdns) plugin. Requires
   the `DUCKDNS_TOKEN` environment variable to be set.

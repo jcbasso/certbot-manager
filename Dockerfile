@@ -1,21 +1,6 @@
-FROM python:3.12-alpine AS pybuilder
-
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    libffi-dev \
-    python3-dev
-
-WORKDIR /wheels
-
-RUN pip wheel --no-cache-dir --wheel-dir=/wheels certbot-dns-duckdns==1.6
-
 FROM certbot/certbot:v4.0.0 AS certbot-duckdns-base
 
-COPY --from=pybuilder /wheels /wheels
-
-RUN pip install --no-cache-dir --no-index --find-links=/wheels /wheels/*.whl \
-    && rm -rf /wheels
+RUN pip install certbot_dns_cloudflare==4.0.0 certbot-dns-duckdns==1.6.0
 
 FROM golang:1.24.1-alpine AS gobuilder
 
